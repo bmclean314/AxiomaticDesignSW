@@ -1,11 +1,9 @@
 package controllers;
 
 import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
@@ -14,11 +12,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.control.cell.TreeItemPropertyValueFactory;
-import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.MouseButton;
-import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
@@ -26,12 +20,9 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontPosture;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
-import javafx.util.Callback;
-import sample.DP;
 import sample.Entry;
 import sample.Main;
 import sample.TooltippedTableCell;
-
 import java.io.IOException;
 import java.net.URL;
 import java.sql.Connection;
@@ -56,15 +47,10 @@ public class MatrixController extends ControllerClass implements Initializable {
     private GridPane grid;
 
     @FXML
-    private ScrollPane scroll;
-
-    @FXML
     private Button homeButton;
 
-    //@FXML
-    private TableView<Entry> table = new TableView<>();
 
-    //private Entry[] ents = new Entry[0];
+    private TableView<Entry> table = new TableView<>();
     private Entry[] orgEnts = new Entry[1];
 
 
@@ -81,10 +67,12 @@ public class MatrixController extends ControllerClass implements Initializable {
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
-        //reload from MatrixCell database if switches >= 1 here
         if(Main.switchesMatrix == 1){ //if this is the first time on this view,
-            String sql = "DELETE FROM MatrixCell;"; //get rid of the data in the database from last time
+            //String sql = "DELETE FROM MatrixCell;"; //get rid of the data in the database from last time
+            String sql = "DROP TABLE IF EXISTS MatrixCell";
+            String sql2 = "CREATE TABLE MatrixCell(matrixrow int(255), matrixcolumn int(255), DPIDfr int(255), equation mediumtext, DPcount int(255), DPIDdp int(255), symbol char(1));";
             executeDatabaseU(sql);
+            executeDatabaseU(sql2);
         }
 
 ///////////////////////////////// Initialize UI elements, grab and organize data from database //////////////////
@@ -99,17 +87,13 @@ public class MatrixController extends ControllerClass implements Initializable {
         root.getChildren().add(table);
 
         //handle action for home button
-        homeButton.setOnAction(new EventHandler<ActionEvent>() {
-            @Override
-            public void handle(ActionEvent event) {
+        homeButton.setOnAction(event-> {
                 try {
                     Main.switchesMatrix++;
                     goToHome(event);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-
-            }
         });
 
         refreshData(); //pull from the database
@@ -124,20 +108,20 @@ public class MatrixController extends ControllerClass implements Initializable {
         for(int y = 0; y < orgEnts.length+1; y++){ //for each DP (Row)
             for(int x = 0; x < orgEnts.length+1; x++){ //and for each FR (Column)
 
-                //FIRST COLUMN
-                if(x==0 && y !=0){
+                //FIRST ROW
+                if(x!=0 && y ==0){
                     Label lab = new Label();
-                    lab.setText("DP" + orgEnts[y-1].displayNum); //set the labels for the DPs
+                    lab.setText("DP" + orgEnts[x-1].displayNum); //set the labels for the DPs
 
                     grid.setRowIndex(lab, y);
                     grid.setColumnIndex(lab, x);
                     grid.getChildren().add(lab);
                 }
 
-                //FIRST ROW
-                else if(y == 0 && x != 0){ //if it's the first ROW
+                //FIRST COLUMN
+                else if(y != 0 && x == 0){ //if it's the first COLUMN
                     Label lab = new Label();
-                    lab.setText("FR" + orgEnts[x-1].displayNum);
+                    lab.setText("FR" + orgEnts[y-1].displayNum);
                     grid.setRowIndex(lab, y);
                     grid.setColumnIndex(lab, x);
                     grid.getChildren().add(lab);
@@ -160,19 +144,12 @@ public class MatrixController extends ControllerClass implements Initializable {
                     //FIRST TIME GOING TO MATRIX - INITIALIZE
                     if(Main.switchesMatrix == 1){
                         //every cell automatically gets a row in the database
-                        String sql = "INSERT INTO MatrixCell VALUES(" + y + ", " + x + ", " + orgEnts[x-1].DPID + ", " + "' '" + ", " + orgEnts[y-1].getPrimaryDP().getCount() + ", " + orgEnts[y-1].DPID + ", " + " 'O');";
+//                        String sql = "INSERT INTO MatrixCell VALUES(" + y + ", " + x + ", " + orgEnts[y-1].DPID + ", " + "' '" + ", " + orgEnts[x-1].getPrimaryDP().getCount() + ", " + orgEnts[x-1].DPID + ", " + " 'O');";
                         tf.setFont(Font.font("Verdana", FontPosture.ITALIC, 12)); //italic when equation hasn't been set (this is initialization so no equations have been set yet)
+//                        //executeDatabaseU(sql);
+                        initializeCell(x, y, tf);
+
                         //executeDatabaseU(sql);
-
-                        if(x==y){ //if the cell is along the diagonal, we can assume the DP already influences the FR
-                            tf.setText("X"); //so it will have an X
-                            sql = "INSERT INTO MatrixCell VALUES(" + y + ", " + x + ", " + orgEnts[x-1].DPID + ", " + "' '" + ", " + orgEnts[y-1].getPrimaryDP().getCount() + ", " + orgEnts[y-1].DPID + ", " + " 'X');";
-                        }
-                        else{
-                            tf.setText("O");
-                        }
-
-                        executeDatabaseU(sql);
                     }
 
                     //RETURNING TO THE MATRIX
@@ -191,7 +168,7 @@ public class MatrixController extends ControllerClass implements Initializable {
 
                             //CELL IS IN DATABASE
                             if(rs.next()){ //if there's data saved for this cell, initialize it with those settings
-                                if(rs.getString("equation").equals(" ")){ //if an equation HASN'T been set for this cell
+                                if(rs.getString("equation").equals(" ") || rs.getString("equation").equals("")){ //if an equation HASN'T been set for this cell
                                     tf.setFont(Font.font("Verdana", FontPosture.ITALIC, 12)); //make it italic
                                 }
                                 else{ //if an equation HAS been set for this cell
@@ -202,16 +179,11 @@ public class MatrixController extends ControllerClass implements Initializable {
 
 
                             //CELL IS NOT IN DATABASE
-                            //TODO: add this cell to the database
                             else{ //if there's no data saved for this cell (AKA, if the FR/DP have been added since the last time the user visited the matrix)
                                 tf.setFont(Font.font("Verdana", FontPosture.ITALIC, 12)); //there's no equation saved so the font is italic
-                                if(x==y){ //if it's a primary DP, put a big X
-                                    tf.setText("X");
-                                }
-                                else { //if it's not a primary DP, put a big O
-                                    tf.setText("O");
-                                }
+                                initializeCell(x, y, tf);
                             }
+                            myconn.close();
                         }
                         catch(Exception e){
                             e.printStackTrace();
@@ -220,7 +192,6 @@ public class MatrixController extends ControllerClass implements Initializable {
 
 
                     //SET CLICK FUNCTIONALITY FOR PRIMARY DPs
-                    //TODO: Blue for all good, Green for in progress, Red for something's wrong. Would probably happen on click.
                     if (x == y) { //if its a primary DP, then it can only be X or O
 
                         //when you right click without setting a context menu, a default context menu appears
@@ -258,56 +229,62 @@ public class MatrixController extends ControllerClass implements Initializable {
                         ContextMenu matrixSymbols = new ContextMenu();
 
                         MenuItem Oitem = new MenuItem("O"); //O - no influence (default)
-                        Oitem.setOnAction(new EventHandler<ActionEvent>() { //link the menu item to the addNewSibling() function
-
-                            @Override
-                            public void handle(ActionEvent event) {
-                                tf.setText("O");
+                        Oitem.setOnAction(e-> {
+                            tf.setText("O");
+                            if(inDatabase(tf) == 1) {
+                                String sql = "UPDATE MatrixCell SET symbol = 'O' WHERE matrixrow = " + grid.getRowIndex(tf) + " AND matrixcolumn = " + grid.getColumnIndex(tf) + ";";
+                                executeDatabaseU(sql);
+                            }
+                            else if(inDatabase(tf) == 0){
+                                String sql = "INSERT INTO MatrixCell VALUES(" + grid.getRowIndex(tf) + ", " + grid.getColumnIndex(tf) + ", " + orgEnts[grid.getRowIndex(tf)-1].DPID + ", " + "' '" + ", " + orgEnts[grid.getColumnIndex(tf)-1].getPrimaryDP().getCount() + ", " + orgEnts[grid.getColumnIndex(tf)-1].DPID + ", " + " 'O');";
+                                executeDatabaseU(sql);
+                            }
+                            else{
+                                System.out.println("Error");
                             }
                         });
-
 
                         MenuItem oitem = new MenuItem("o"); //o - minor influence
-                        oitem.setOnAction(new EventHandler<ActionEvent>() { //link the menu item to the addNewSibling() function
-
-                            @Override
-                            public void handle(ActionEvent event) {
-                                tf.setText("o");
+                        oitem.setOnAction(e-> {
+                            tf.setText("o");
+                            if(inDatabase(tf) == 1) {
+                                String sql = "UPDATE MatrixCell SET symbol = 'o' WHERE matrixrow = " + grid.getRowIndex(tf) + " AND matrixcolumn = " + grid.getColumnIndex(tf) + ";";
+                                executeDatabaseU(sql);
+                            }
+                            else if(inDatabase(tf) == 0){
+                                String sql = "INSERT INTO MatrixCell VALUES(" + grid.getRowIndex(tf) + ", " + grid.getColumnIndex(tf) + ", " + orgEnts[grid.getRowIndex(tf)-1].DPID + ", " + "' '" + ", " + orgEnts[grid.getColumnIndex(tf)-1].getPrimaryDP().getCount() + ", " + orgEnts[grid.getColumnIndex(tf)-1].DPID + ", " + " 'o');";
+                                executeDatabaseU(sql);
+                            }
+                            else{
+                                System.out.println("Error");
                             }
                         });
-
 
                         MenuItem xitem = new MenuItem("x"); //x - significant influence from minor DP
-                        xitem.setOnAction(new EventHandler<ActionEvent>() { //link the menu item to the addNewSibling() function
-
-                            @Override
-                            public void handle(ActionEvent event) {
-                                tf.setText("x");
+                        xitem.setOnAction(e-> {
+                            tf.setText("x");
+                            if(inDatabase(tf) == 1) {
+                                String sql = "UPDATE MatrixCell SET symbol = 'x' WHERE matrixrow = " + grid.getRowIndex(tf) + " AND matrixcolumn = " + grid.getColumnIndex(tf) + ";";
+                                executeDatabaseU(sql);
+                            }
+                            else if(inDatabase(tf) == 0){
+                                String sql = "INSERT INTO MatrixCell VALUES(" + grid.getRowIndex(tf) + ", " + grid.getColumnIndex(tf) + ", " + orgEnts[grid.getRowIndex(tf)-1].DPID + ", " + "' '" + ", " + orgEnts[grid.getColumnIndex(tf)-1].getPrimaryDP().getCount() + ", " + orgEnts[grid.getColumnIndex(tf)-1].DPID + ", " + " 'x');";
+                                executeDatabaseU(sql);
+                            }
+                            else{
+                                System.out.println("Error");
                             }
                         });
-
 
                         matrixSymbols.getItems().addAll(Oitem, oitem, xitem); //put the items in the contextmenu
 
 
-                        tf.setOnContextMenuRequested(new EventHandler<ContextMenuEvent>() { //when you RIGHT-CLICK on a textfield
+                        tf.setOnContextMenuRequested(event-> matrixSymbols.show(tf, event.getScreenX(), event.getScreenY())); //show the context menu where the user clicked
 
-                            @Override
-                            public void handle(ContextMenuEvent event) {
-                                matrixSymbols.show(tf, event.getScreenX(), event.getScreenY()); //show the context menu where the user clicked
-                            }
-                        });
-
-                        //TODO change to double click, make a add/edit/delete equations popup
-                        //NOTE: using context menu event to add possible add eq/change eq later
-                        tf.setOnMouseClicked(new EventHandler<MouseEvent>() {
-                            @Override
-                            public void handle(MouseEvent mouseEvent) {
+                        tf.setOnMouseClicked(mouseEvent-> {
                                 if (mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
                                     equationPopup(tf);
                                 }
-
-                            }
                         });
                     }
 
@@ -341,26 +318,9 @@ public class MatrixController extends ControllerClass implements Initializable {
 
 
         //puts all the data into the cells
-        displayNumCol.setCellValueFactory(new Callback<TableColumn.CellDataFeatures<Entry, String>, ObservableValue<String>>() {
-            public ObservableValue<String> call(TableColumn.CellDataFeatures<Entry, String> p) {
-                // p.getValue() returns the Person instance for a particular TableView row
-                return new SimpleStringProperty(p.getValue().displayNum);
-            }
-        });
-
-        frCol.setCellValueFactory(new Callback<TableColumn.CellDataFeatures<Entry, String>, ObservableValue<String>>() {
-            public ObservableValue<String> call(TableColumn.CellDataFeatures<Entry, String> p) {
-                // p.getValue() returns the Person instance for a particular TableView row
-                return new SimpleStringProperty(p.getValue().FR);
-            }
-        });
-
-        dpCol.setCellValueFactory(new Callback<TableColumn.CellDataFeatures<Entry, String>, ObservableValue<String>>() {
-            public ObservableValue<String> call(TableColumn.CellDataFeatures<Entry, String> p) {
-                // p.getValue() returns the Person instance for a particular TableView row
-                return new SimpleStringProperty(p.getValue().getDP()[0].getDp());
-            }
-        });
+        displayNumCol.setCellValueFactory(p-> new SimpleStringProperty(p.getValue().displayNum));
+        frCol.setCellValueFactory(p-> new SimpleStringProperty(p.getValue().FR));
+        dpCol.setCellValueFactory(p-> new SimpleStringProperty(p.getValue().getPrimaryDP().getDp()));
 
 
         //add the columns and data to the table
@@ -383,7 +343,7 @@ public class MatrixController extends ControllerClass implements Initializable {
 
         //loads the scene
         FXMLLoader loader = new FXMLLoader();
-        loader.setLocation(getClass().getResource("../FXML/sample.fxml"));
+        loader.setLocation(getClass().getResource("/FXML/sample.fxml"));
         Parent P = loader.load();
         Scene s = new Scene(P, 1000, 500);
 
@@ -438,37 +398,116 @@ public class MatrixController extends ControllerClass implements Initializable {
     }
 
 
-
+    /**
+     * Called when a user double clicks a square in the matrix to open a popup for adding, editing, and deleting equations
+     * @param tf the TextField object that the user clicked on
+     */
     private void equationPopup(TextField tf){
+        int row = grid.getRowIndex(tf);
+        int column = grid.getColumnIndex(tf);
+
+        TextField text = new TextField();
+
+
+        //String sql = "SELECT * FROM MatrixCell WHERE matrixrow = " + row + " AND matrixcolumn = " + column + ";";
+        String url_ = "jdbc:mariadb://localhost:3306/mysql";
+        String usr = "root";
+        String pwd = "root";
+        try {
+            Connection myconn = DriverManager.getConnection(url_, usr, pwd);
+            Statement stmt = myconn.createStatement();
+
+            String sql = "SELECT * FROM MatrixCell WHERE matrixrow = " + row + " AND matrixcolumn = " + column + ";";
+
+            ResultSet rs = stmt.executeQuery(sql);
+
+            if(rs.next()) {
+                text.setText(rs.getString("equation"));
+            }
+            else{
+                String sql2 = "INSERT INTO MatrixCell VALUES(" + row + ", " + column + ", " + orgEnts[row-1].DPID + ", " + "' '" + ", " + orgEnts[column-1].getPrimaryDP().getCount() + ", " + orgEnts[column-1].DPID + ", " + " 'O');";
+                executeDatabaseU(sql2);
+            }
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
         //make a popup with a textfield to enter an equation and a submit button
         Stage popup = new Stage();
         VBox vbox = new VBox(20);
         Label label = new Label();
-        TextField text = new TextField();
+        //TextField text = new TextField();
         Button butt = new Button("Submit");
         vbox.getChildren().addAll(label, text, butt);
         Scene scene = new Scene(vbox, 300, 200);
 
         label.setText("Enter your Equation: ");
 
-        butt.setOnAction(new EventHandler<ActionEvent>() { //when they submit their equation
-            @Override
-            public void handle(ActionEvent event) {
+        butt.setOnAction(event-> {
                 String eq = text.getText(); //get the equation
+                if(eq.equals("") || eq.equals(" ")){
+                    tf.setFont(Font.font("Verdana", FontPosture.ITALIC, 12));
+                }
+                else{
+                    tf.setFont(Font.font("Verdana", FontWeight.BOLD, 12));
+                }
                 popup.close(); //close the popup window
                 //NOTE: grid starts at 1, not 0. Keep that in mind with these variables
-                int row = grid.getRowIndex(tf);
-                int column = grid.getColumnIndex(tf);
 
-                //change the text to bold and update the database
-                tf.setFont(Font.font("Verdana", FontWeight.BOLD, 12));
                 String sql2 = "UPDATE MatrixCell SET equation = '" + eq + "' WHERE matrixrow = " + row + " AND matrixcolumn = " + column + ";";
                 executeDatabaseU(sql2);
-
-            }
         });
         popup.setScene(scene);
         popup.show();
+    }
+
+
+    /**
+     * Sets the symbol for a new cell in the matrix based on its location
+     * @param x the column the cell is in
+     * @param y the row the cell is in
+     * @param tf the textfield object at the given x and y location
+     */
+    private void initializeCell(int x, int y, TextField tf){
+        if(x==y){ //if the cell is along the diagonal, we can assume the DP already influences the FR
+            tf.setText("X"); //so it will have an X
+            String sql = "INSERT INTO MatrixCell VALUES(" + y + ", " + x + ", " + orgEnts[y-1].DPID + ", " + "' '" + ", " + orgEnts[x-1].getPrimaryDP().getCount() + ", " + orgEnts[x-1].DPID + ", " + " 'X');";
+            executeDatabaseU(sql);
+        }
+        else{
+            tf.setText("O");
+        }
+    }
+
+
+    /**
+     * Determines if the given TextField object is in the database or not.
+     * @param tf TextField we are trying to determine is in the database or not
+     * @return 0 if tf is not in database, 1 if it is
+     */
+    private int inDatabase(TextField tf){
+        String url_ = "jdbc:mariadb://localhost:3306/mysql";
+        String usr = "root";
+        String pwd = "root";
+        try {
+            Connection myconn = DriverManager.getConnection(url_, usr, pwd);
+            Statement stmt = myconn.createStatement();
+
+            String sql = "SELECT * FROM MatrixCell WHERE matrixrow = " + grid.getRowIndex(tf) + " AND matrixcolumn = " + grid.getColumnIndex(tf) + ";";
+            ResultSet rs = stmt.executeQuery(sql);
+
+            if(rs.next()){
+                return 1; //true
+            }
+            else{
+                return 0; //false
+            }
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+        return -1; //error
     }
 
 }

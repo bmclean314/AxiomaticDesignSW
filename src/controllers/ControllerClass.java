@@ -1,41 +1,37 @@
 package controllers;
 
-import javafx.event.ActionEvent;
-import javafx.fxml.FXMLLoader;
-import javafx.scene.Node;
-import javafx.scene.Parent;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import sample.CN;
 import sample.DP;
 import sample.Entry;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.*;
 
 /**
  * <h1>Controller Class</h1>
- * This class was made to be inherited by the HomeController and MatrixController classes.
- * Here, both controllers can access methods that they both need to use. Mostly, the functions in this class
- * update/pull from the database, as both controllers rely on accessing the database.
+ * This class was made to be inherited by the HomeController, MatrixController, and CNController classes.
+ * Here, all controllers can access methods that they both need to use. Mostly, the functions in this class
+ * update/pull from the database, as all controllers rely on accessing the database.
  *
  * @author Bridget McLean - bmclean@wpi.edu
  */
-public class ControllerClass {
+class ControllerClass {
 
-    public Entry[] FRDP = new Entry[0];
+    Entry[] FRDP = new Entry[0];
 
-    public CN[] cnList = new CN[0];
+    CN[] cnList = new CN[0];
 
 
     /**
      * Pulls everything from the Entry table in the database and puts each row into Entry objects.
      * Entry objects are stored in the FRDP array
      */
-    public void refreshData(){
+    void refreshData(){
 
         this.FRDP = new Entry[0]; //clear the old array
 
@@ -58,14 +54,14 @@ public class ControllerClass {
                     Entry[] newEnts = new Entry[this.FRDP.length+1]; //extend the list
                     System.arraycopy(this.FRDP, 0, newEnts, 0, this.FRDP.length); //copy it over
                     //put the Entry from the database into an object and add it to the end of the list
-                    System.out.println("dpDatabase[id].length: " + dpDatabase[id].length);
+                    //.println("dpDatabase[id].length: " + dpDatabase[id].length);
                     newEnts[this.FRDP.length] = new Entry(rs.getString("FR"), dpDatabase[id], rs.getString("displayNum"), rs.getInt("DPID"), rs.getInt("numChildren"), rs.getInt("parentID"));
                     this.FRDP = newEnts;
                 }
                 else{
                     System.out.println("Initialize in MatrixController: DPID and dpDatabase index aren't the same but you thought they were.");
                 }
-
+            myconn.close();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -85,7 +81,7 @@ public class ControllerClass {
      * whose DPID is the same as the column index
      * @return the 2d array
      */
-    public DP[][] fromDatabase() {
+    private DP[][] fromDatabase() {
 
         DP[][] dpDatabase = new DP[0][0];
 
@@ -120,7 +116,14 @@ public class ControllerClass {
                             newDP[j] = dp[j]; //copy everything over
                         }
                         //make a dp object with the row data from the database and add it to the end of the new list
-                        newDP[len] = new DP(rs2.getString("DP"), rs2.getInt("DPID"), rs2.getInt("count"), rs2.getInt("isPrimary"));
+                        boolean isPrimary;
+                        if(rs2.getInt("isPrimary") == 1){
+                            isPrimary = true;
+                        }
+                        else{
+                            isPrimary = false;
+                        }
+                        newDP[len] = new DP(rs2.getString("DP"), rs2.getInt("DPID"), rs2.getInt("count"), isPrimary);
 
                         dp = newDP; //save the extended list to the dp list so we can access it next loop
                     }
@@ -135,6 +138,7 @@ public class ControllerClass {
 
                 }
             }
+            myconn.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -147,7 +151,7 @@ public class ControllerClass {
      * @param sql String that contains an sql command to be executed in the database. Note: command
      *            must be of type "INSERT"/"UPDATE"/"DELETE" -- this function will not execute queries.
      */
-    public void executeDatabaseU(String sql) {
+    void executeDatabaseU(String sql) {
 
         String url = "jdbc:mariadb://localhost:3306/mysql";
         String usr = "root";
@@ -156,8 +160,9 @@ public class ControllerClass {
             Connection myconn = DriverManager.getConnection(url, usr, pwd);
             Statement stmt = myconn.createStatement();
 
-            System.out.println(sql);
+            //System.out.println(sql);
             stmt.executeUpdate(sql);
+            myconn.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -167,7 +172,7 @@ public class ControllerClass {
      * Pulls everything from the CN table in the database and puts each row into CN objects.
      * CN objects are stored in the cnList array
      */
-    public void refreshCNData(){
+    void refreshCNData(){
 
         this.cnList = new CN[0]; //clear the old array
 
@@ -193,6 +198,7 @@ public class ControllerClass {
 
 
             }
+            myconn.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -224,32 +230,38 @@ public class ControllerClass {
                         if((cn.getDisplayID().equals(rs.getString("CNdisplayID"))) && (entry.DPID == rs.getInt("DPID"))){
                             cn.addFR(entry); //add the entry to the CN's list of FRs
                             entry.addCN(cn); //add the CN to the Entry's list of CNs
-                            System.out.println("Added");
+                            //System.out.println("Added");
                         }
                     }
                 }
             }
+            myconn.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-//    /**
-//     * Function called by home button event handler that changes the scene back to the spreadsheet/tree view
-//     * @param event fired by home button
-//     * @throws IOException ?
-//     */
-//    public void goToHome(ActionEvent event) throws IOException {
-//
-//        //loads the scene
-//        FXMLLoader loader = new FXMLLoader();
-//        loader.setLocation(getClass().getResource("../FXML/sample.fxml"));
-//        Parent P = loader.load();
-//        Scene s = new Scene(P);
-//
-//        //shows the scene
-//        Stage window = (Stage) ((Node) event.getSource()).getScene().getWindow();
-//        window.setScene(s);
-//        window.show();
-//    }
+
+    /**
+     * Creates a simple popup with a label and a button, used for alerting the user of errors
+     * @param lab String describing the error
+     */
+    public void errorPopup(String lab){
+        Stage stage2 = new Stage();
+        VBox dialogVbox2 = new VBox(20);
+        Label lab2 = new Label(lab);
+        lab2.setMaxWidth(275);
+        lab2.setWrapText(true);
+        dialogVbox2.setAlignment(Pos.CENTER);
+        Button b2 = new Button("OK");
+        dialogVbox2.getChildren().addAll(lab2, b2);
+        b2.setOnAction(event-> stage2.close());
+
+        Scene dialogScene = new Scene(dialogVbox2, 300, 200);
+        stage2.setScene(dialogScene);
+        stage2.show();
+
+
+    }
+
 }

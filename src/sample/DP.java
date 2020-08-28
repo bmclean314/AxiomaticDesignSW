@@ -1,6 +1,7 @@
 package sample;
 
 
+
 /**
  * <h1>DP Class</h1>
  * A DP object holds data for each DP. Since one FR can have many alternative DPs, this DP class was made
@@ -14,7 +15,7 @@ public class DP {
     private String dp;
     private int DPId; //matches the DPID field in the Entry object
     private int count; //counts how many DPs are associated with the same FR
-    private int isPrimary; //0 if it's the primary DP for that FR
+    private boolean isPrimary; //0 if it's the primary DP for that FR
 
     /**
      * Constructor for a DP object
@@ -29,7 +30,7 @@ public class DP {
      *                  one alternative DP per every FR can be primary - AKA only 1 DP in the dpList can be primary -
      *                  - AKA no two (or more) DPs with the same DPID can both be primary
      */
-    public DP(String dp, int DPId, int count, int isPrimary) {
+    public DP(String dp, int DPId, int count, boolean isPrimary) {
         this.dp = dp;
         this.DPId = DPId;
         this.count = count;
@@ -80,7 +81,7 @@ public class DP {
      * Getter for the isPrimary attribute
      * @return int - 0 if it's not primary, 1 if it is
      */
-    public int getIsPrimary() {
+    public boolean getIsPrimary() {
         return isPrimary;
     }
 
@@ -88,7 +89,10 @@ public class DP {
      * Setter for the isPrimary attribute
      * @param isPrimary 0 if it's no longer primary, 1 to make it primary
      */
-    public void setIsPrimary(int isPrimary) {
+    public void setIsPrimary(boolean isPrimary) {
+
         this.isPrimary = isPrimary;
+
+
     }
 }

@@ -14,7 +14,7 @@ import java.sql.Statement;
 public class Main extends Application {
 
     //0 on application start when database needs to be cleared
-    //1 when application changes scenes and data in database needs to stay
+    //1+ when application changes scenes and data in database needs to stay
     public static int switchesMatrix = 0;
     public static int switchesCN = 0;
 
@@ -22,7 +22,7 @@ public class Main extends Application {
     @Override
     public void start(Stage primaryStage) throws Exception{
 
-        FXMLLoader loader = new FXMLLoader(getClass().getResource("../FXML/sample.fxml"));
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/FXML/sample.fxml"));
         Parent root = loader.load();
         primaryStage.setTitle("Axiomatic Design Software");
         primaryStage.setScene(new Scene(root, 1000, 500));

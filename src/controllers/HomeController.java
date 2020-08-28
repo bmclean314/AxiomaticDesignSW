@@ -1,21 +1,19 @@
 package controllers;
 
+import java.io.*;
 import java.net.URL;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.ResourceBundle;
-
+import java.util.*;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
@@ -23,19 +21,17 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-
-import java.io.IOException;
-
 import javafx.fxml.FXMLLoader;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.control.cell.TextFieldTreeTableCell;
-import javafx.scene.control.cell.TreeItemPropertyValueFactory;
-import javafx.scene.input.ContextMenuEvent;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import javafx.util.Callback;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeTableView;
+import javafx.util.Callback;
 import sample.CN;
 import sample.DP;
 import sample.Entry;
@@ -68,6 +64,10 @@ public class HomeController extends ControllerClass implements Initializable {
 
     private Button traceBttn = new Button();
 
+    private Button saveBttn = new Button();
+
+    private Button reloadBttn = new Button();
+
     private ObservableList<TreeItem<Entry>> treeData = FXCollections.observableArrayList(); //all items in the treeview
 
     private int autoDPID = -1; //this variable holds the next DPID at any time
@@ -89,7 +89,6 @@ public class HomeController extends ControllerClass implements Initializable {
 
         rootPane.setMaxSize(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
         rootPane.setMinSize(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-        //rootPane.setPrefSize(400, 600);
 
         mytreetable.setPrefSize(288, 341);
         mytreetable.setLayoutX(166);
@@ -118,7 +117,17 @@ public class HomeController extends ControllerClass implements Initializable {
         traceBttn.setText("Trace");
         traceBttn.setPrefSize(65, 10);
 
-        rootPane.getChildren().addAll(matrixButton, cnButton, traceBttn); //add button to AnchorPane
+        saveBttn.setLayoutX(212);
+        saveBttn.setLayoutY(1);
+        saveBttn.setText("Save");
+        saveBttn.setPrefSize(65, 10);
+
+        reloadBttn.setLayoutX(278);
+        reloadBttn.setLayoutY(1);
+        reloadBttn.setText("Reload");
+        reloadBttn.setPrefSize(65, 10);
+
+        rootPane.getChildren().addAll(matrixButton, cnButton, traceBttn, saveBttn, reloadBttn); //add buttons to AnchorPane
 
         treeColID.setPrefWidth(56.0);
         treeColID.setText("#");
@@ -142,18 +151,22 @@ public class HomeController extends ControllerClass implements Initializable {
 
 
         if (Main.switchesMatrix == 0 && Main.switchesCN == 0) { //if this is the first time opening the home screen
-            DP dp0 = new DP(" ", 0, getAutoDPID(), 1); //make a fresh dp
+            DP dp0 = new DP(" ", 0, getAutoDPID(), true); //make a fresh dp
             DP[] dpList0 = new DP[1]; //make a fresh dpList
             dpList0[0] = dp0; //put the dp in the dpList
             Entry FRDP0ent = new Entry(" ", dpList0, "0", autoDPID, 0, -1); //make a fresh entry object
             TreeItem<Entry> FRDP0 = new TreeItem<>(FRDP0ent); //turn it into a tree item
-            Entry[] temp = new Entry[1]; //extend the FRDP list (it's initialized to 0 because the Entry's are dynamically added from the database when the scene reopens)
-            FRDP = temp;
+            FRDP = new Entry[1]; //extend the FRDP list (it's initialized to 0 because the Entry's are dynamically added from the database when the scene reopens)
             FRDP[0] = FRDP0ent; //add the Entry object to the FRDP list
             mytreetable.setRoot(FRDP0); //puts the tree item object at the top
 
-            String sql = "DELETE FROM Entry;"; //delete everything from the previous session in the database
-            String sql2 = "DELETE FROM DP;";
+//            String sql = "DELETE FROM Entry;"; //delete everything from the previous session in the database
+//            String sql2 = "DELETE FROM DP;";
+            String sql = "DROP TABLE IF EXISTS Entry";
+            String sql2 = "DROP TABLE IF EXISTS DP";
+
+            String sql5 = "CREATE TABLE Entry(FR mediumtext, DPID int(255), displayNum mediumtext, numChildren int(255), parentID int(255));";
+            String sql6 = "CREATE TABLE DP(DPID int(255), DP mediumtext, count int(255), isPrimary int(11));";
 
             //add the 0 row to the database
             String sql3 = "INSERT INTO Entry VALUES('" + FRDP0ent.FR + "', " + FRDP0ent.DPID + ", '" + FRDP0ent.displayNum + "', " + FRDP0ent.numChildren + ", " + FRDP0ent.parentID + ");";
@@ -161,6 +174,8 @@ public class HomeController extends ControllerClass implements Initializable {
 
             executeDatabaseU(sql);
             executeDatabaseU(sql2);
+            executeDatabaseU(sql5);
+            executeDatabaseU(sql6);
             executeDatabaseU(sql3);
             executeDatabaseU(sql4);
 
@@ -176,28 +191,14 @@ public class HomeController extends ControllerClass implements Initializable {
 //////////////////////////////// Display the text in the treeview and make it editable ////////////////////////////////
 
         //displays text in the FR column
-        treeColFR.setCellValueFactory(new Callback<TreeTableColumn.CellDataFeatures<Entry, String>, ObservableValue<String>>() {
-            @Override
-            public ObservableValue<String> call(TreeTableColumn.CellDataFeatures<Entry, String> param) {
-                return new SimpleStringProperty(param.getValue().getValue().getFR());
-            }
-        });
+        treeColFR.setCellValueFactory(param-> new SimpleStringProperty(param.getValue().getValue().getFR()));
 
         //displays text in the DP column
-        treeColDP.setCellValueFactory(new Callback<TreeTableColumn.CellDataFeatures<Entry, String>, ObservableValue<String>>() {
-            @Override
-            public ObservableValue<String> call(TreeTableColumn.CellDataFeatures<Entry, String> param) {
-                return new SimpleStringProperty(param.getValue().getValue().getDP()[0].getDp()); //puts all the DPs in the DP column
-            }
-        });
+        treeColDP.setCellValueFactory(param-> new SimpleStringProperty(param.getValue().getValue().getDP()[0].getDp())); //puts all the DPs in the DP column
 
         //displays text in the ID column
-        treeColID.setCellValueFactory(new Callback<TreeTableColumn.CellDataFeatures<Entry, String>, ObservableValue<String>>() {
-            @Override
-            public ObservableValue<String> call(TreeTableColumn.CellDataFeatures<Entry, String> param) {
-                return new SimpleStringProperty(param.getValue().getValue().getDisplayNum()); //puts all the DPs in the DP column
-            }
-        });
+        treeColID.setCellValueFactory(param-> new SimpleStringProperty(param.getValue().getValue().getDisplayNum())); //puts all the DPs in the DP column
+
 
 
         //gives you a text field to write/edit in the FR column
@@ -219,12 +220,11 @@ public class HomeController extends ControllerClass implements Initializable {
         //javafx has a thing that turns cells into comboboxcells automatically, but it was difficult for me to figure out -->
         // --> how to allow the user to enter a DP in and save it as an option in the combobox
         //the changed() function I'm overriding is what allows me to listen for the user selecting an option from the combobox, -->
-        // --> this way, I can tell when they select "add new DP...", and set off all the events to make the popup
-        //TODO: Remove DPs, Edit DPs, set primary DP checkbox.
+        // --> this way, I can tell when they select "Edit DPs...", and set off all the events to make the popup
         treeColDP.setCellFactory(tc -> {
             ComboBox<String> combo = new ComboBox<>(); //make the combobox
             combo.setMaxWidth(1.7976931348623157E308); //this number is equal to max width of the cell
-            TreeTableCell<Entry, String> cell = new TreeTableCell<Entry, String>() { //make the new cell
+            return new TreeTableCell<>() { //make the new cell
                 @Override
                 protected void updateItem(String item, boolean empty) {//item is the string being shown in the cell, empty is if it's empty or not
                     super.updateItem(item, empty); //inherit everything from the original updateItem function
@@ -236,141 +236,29 @@ public class HomeController extends ControllerClass implements Initializable {
                         Entry entry = this.getTreeTableRow().getItem(); //get the current row item
 
                         if (entry == null) {
-                            System.out.println("The selected item is null");
+                            //System.out.println("The selected item is null");
                         }
                         else {
-                            System.out.println("entry.displayNum: " + entry.displayNum);
                             ObservableList<String> allDPList = FXCollections.observableArrayList(getList(entry.getDP(), false)); //get an observable list of all the DP strings for this FR
                             combo.getItems().clear(); //make sure nothing is in the combobox
                             combo.getItems().addAll(allDPList); //add all the DPs to the combobox
-                            //combo.getSelectionModel().select(2); //preview the 3rd item in the combobox (skips "Add DP" and "Change DP")
                             setGraphic(combo); //sets the cell's graphic as the combo box
 
-//                        for (int i = 0; i < entry.getDP().length; i++) {
-//                            if (entry.getDP()[i].getIsPrimary() == 1) {
-//                                combo.setValue(entry.getDP()[i].getDp()); //display the dp marked as primary
-//                            }
-//                        }
-                            combo.setValue(entry.getPrimaryDP().getDp());
+                            combo.setValue(entry.getPrimaryDP().getDp()); //show the primary DP, if there is one
 
                             combo.valueProperty().addListener(new ChangeListener<String>() {
                                 //t is what the combobox was on, t1 is what the combobox is being changed to
                                 @Override
                                 public void changed(ObservableValue ov, String t, String t1) {
-                                    if (t1 == null || t == null) {
-                                    } else if (t1.equals("Add New DP...")) { //if the user wants to add a new DP
-                                        VBox dialogVbox = new VBox(20);
-                                        dialogVbox.setAlignment(Pos.CENTER);
-                                        TextField txt = new TextField("Enter new DP..."); //create textfield to enter new DP
-                                        Button butt = new Button(); //create the submit button to close/go back
-                                        butt.setText("Submit");
-
-                                        dialogVbox.getChildren().add(txt); //add textfield to VBox
-                                        dialogVbox.getChildren().add(butt); //add button to VBox
-                                        Scene dialogScene = new Scene(dialogVbox, 300, 150);
-                                        dialog.setScene(dialogScene);
-                                        if (!dialog.isShowing()) {
-                                            dialog.show(); //show the popup window
-                                        }
-
-                                        butt.setOnAction(new EventHandler<ActionEvent>() { //when they submit their new DP
-                                            @Override
-                                            public void handle(ActionEvent event) {
-                                                try {
-                                                    String newDP = txt.getText(); //get the text they entered
-
-                                                    if (entry.getDP()[0].getDp().equals(" ")) { //if this is the first DP
-                                                        entry.getDP()[0].setDp(newDP); //update the DP list in the Entry object (right now it's "")
-                                                        combo.getItems().remove(" "); //Remove the blank option from the combobox
-                                                        updateDP(entry, newDP); //update the dp in the database
-
-                                                    } else {
-                                                        entry.addDP(newDP);//update the DP list in the Entry object
-                                                    }
-
-                                                    combo.getItems().add(newDP); //add the new DP to the combobox
-                                                    combo.setValue(newDP); //set it to the display value
-                                                    dialog.close(); //close the popup window
-
-                                                } catch (Exception e) {
-                                                    e.printStackTrace();
-                                                }
-
-                                            }
-                                        });
-
-                                    } else if (t1.equals("Change DP...")) { //if the user wants to change a dp
-                                        VBox dialogVbox2 = new VBox(20);
-                                        dialogVbox2.setAlignment(Pos.CENTER);
-                                        ComboBox dpCombo = new ComboBox(); //make a combobox with all the dps in it
-                                        dpCombo.getItems().addAll(FXCollections.observableArrayList(getList(entry.getDP(), true)));
-                                        dialogVbox2.getChildren().add(dpCombo);
-
-                                        TextField txt2 = new TextField(""); //create textfield to enter changed DP
-                                        Button butt2 = new Button(); //create the submit button to close/go back
-                                        butt2.setText("Submit");
-
-                                        dpCombo.valueProperty().addListener(new ChangeListener<String>() { //listens for the user selecting a dp from the combobox
-                                            @Override
-                                            public void changed(ObservableValue ov, String t, String t1) {
-                                                txt2.setText(t1); //and puts that dp in the textfield so they can edit it
-                                            }
-                                        });
-
-                                        //first update the combobox, then update the Entry object
-                                        butt2.setOnAction(new EventHandler<ActionEvent>() { //when they submit their edited DP
-                                            @Override
-                                            public void handle(ActionEvent event) {
-                                                try {
-                                                    String changeDP = txt2.getText();
-                                                    //this will change the placement of the DP being edited
-                                                    //if this is a problem I can try to change later
-                                                    combo.getItems().remove(dpCombo.getValue()); //remove the old value from the combobox
-                                                    combo.getItems().add(changeDP); //add the edited value
-
-                                                    dpCombo.getItems().remove(t1); //remove the old value from the dp combobox
-                                                    dpCombo.getItems().add(changeDP); //add the new value to the dp combobox
-
-                                                    for (int i = 0; i < entry.getDP().length; i++) {
-                                                        if (entry.getDP()[i].getDp().equals(dpCombo.getValue())) {
-                                                            entry.getDP()[i].setDp(changeDP);
-                                                            entry.getDP()[i].setIsPrimary(1);
-                                                        } else if (entry.getDP()[i].getIsPrimary() == 1) {
-                                                            entry.getDP()[i].setIsPrimary(0);
-                                                        }
-                                                    }
-                                                    updateDP(entry, changeDP); //update the dp in the database
-                                                    combo.setValue(changeDP); //set it to the display value
-                                                    dialog.close(); //close the popup window
-                                                } catch (Exception e) {
-                                                    e.printStackTrace();
-                                                }
-                                            }
-                                        });
-
-                                        dialogVbox2.getChildren().addAll(txt2, butt2);
-                                        Scene scene = new Scene(dialogVbox2, 300, 150);
-                                        dialog.setScene(scene);
-
-                                        if (!dialog.isShowing()) {
-                                            dialog.show(); //show the popup window
-                                        }
-
-                                    } else { //if they're switching from one DP to another
-                                        for (int i = 0; i < entry.getDP().length; i++) {
-                                            if (entry.getDP()[i].getDp().equals(t)) {
-                                                //System.out.println(entry.getDP()[i].getIsPrimary());
-                                                entry.getDP()[i].setIsPrimary(0);
-                                            } else if (entry.getDP()[i].getDp().equals(t1)) {
-                                                entry.getDP()[i].setIsPrimary(1);
-                                                String sql = "UPDATE DP SET isPrimary = 0 WHERE isPrimary = 1 AND DPID = " + entry.getDP()[i].getDPId() + ";";
-                                                String sql2 = "UPDATE DP SET isPrimary = 1 WHERE DPID = " + entry.getDP()[i].getDPId() + " AND COUNT = " + entry.getDP()[i].getCount() + ";";
-                                                executeDatabaseU(sql);
-                                                executeDatabaseU(sql2);
 
 
-                                            }
-                                        }
+                                    if (t1 == null || t == null) { //sometimes they're just null, ignore it
+                                    }
+
+                                    else if (t1.equals("Edit DPs...")) { //if the user wants to add/edit/delete a new DP
+
+                                        DPEditor(dialog, entry, combo); //open a popup
+
                                     }
                                 }
                             });
@@ -378,21 +266,18 @@ public class HomeController extends ControllerClass implements Initializable {
                     }
                 }
             };
-            return cell; //return the new cell
         });
 
         //commits edits to FRs
-        treeColFR.setOnEditCommit(new EventHandler<TreeTableColumn.CellEditEvent<Entry, String>>() {
-            @Override
-            public void handle(final TreeTableColumn.CellEditEvent<Entry, String> event) {
+        treeColFR.setOnEditCommit(event->{
                 Entry oldFR = event.getRowValue().getValue(); //gets the Entry object that is being edited
                 oldFR.setFR(event.getNewValue()); //sets the new FR
+                String temp = event.getNewValue();
+                temp = temp.replace("'","''"); //if there's an apostrophe in user input this stops the database from error-ing out
 
                 //update the FR in the database
-                String sql = "UPDATE Entry SET FR = '" + event.getNewValue() + "' WHERE DPID = " + oldFR.DPID + ";";
+                String sql = "UPDATE Entry SET FR = '" + temp + "' WHERE DPID = " + oldFR.DPID + ";";
                 executeDatabaseU(sql);
-
-            }
         });
 
 
@@ -400,46 +285,33 @@ public class HomeController extends ControllerClass implements Initializable {
 
 ////////////////////////////// Set up right-click event and subsequent contextMenu /////////////////////////////////////////////////
 
-        //TODO: When you click outside the context menu, it disappears
         ContextMenu contextMenu = new ContextMenu(); //create the contextmenu
 
 
-        MenuItem addRowItem = new MenuItem("Add Row"); //create menu item for adding a row
-        addRowItem.setOnAction(new EventHandler<ActionEvent>() { //link the menu item to the addNewSibling() function
-
-            @Override
-            public void handle(ActionEvent event) {
-                addNewSibling();
-            }
-        });
+        MenuItem addRowItem = new MenuItem("Add Sibling"); //create menu item for adding a row
+        addRowItem.setOnAction(event-> addNewSibling());
 
 
         MenuItem addChildItem = new MenuItem("Add Child"); //create menu item for adding a child
-        addChildItem.setOnAction(new EventHandler<ActionEvent>() {//link the menu item to the addNewChild() function
-
-            @Override
-            public void handle(ActionEvent event) {
-                addNewChild();
-            }
-        });
+        addChildItem.setOnAction(event-> addNewChild());
 
         MenuItem deleteRowItem = new MenuItem("Delete Row"); //create menu item for deleting a row
-        deleteRowItem.setOnAction(new EventHandler<ActionEvent>() {//link the menu item to the addNewChild() function
+        deleteRowItem.setOnAction(event -> deleteRow());
 
-            @Override
-            public void handle(ActionEvent event) {
-                deleteRow();
+        contextMenu.getItems().addAll(addRowItem, addChildItem, deleteRowItem); //add menu items to the contextmenu
+        contextMenu.setAutoHide(true);
+
+        //closes the context menu when you click outside of it
+        mytreetable.setOnMouseClicked(event->{
+            if(event.getButton() == MouseButton.PRIMARY) {
+                if (contextMenu.isShowing()) {
+                    contextMenu.hide();
+                }
             }
         });
 
-
-        contextMenu.getItems().addAll(addRowItem, addChildItem, deleteRowItem); //add menu items to the contextmenu
-
         // When user right-clicks on the FRs or DPs
-        mytreetable.setOnContextMenuRequested(new EventHandler<ContextMenuEvent>() {
-
-            @Override
-            public void handle(ContextMenuEvent event) {
+        mytreetable.setOnContextMenuRequested(event-> {
                 TreeItem<Entry> clicked = mytreetable.getSelectionModel().getSelectedItem(); //get the item that was clicked
                 if (clicked.getValue().displayNum.equals("0")) { //can't add a sibling to or delete the 0 row
                     addRowItem.setDisable(true);
@@ -450,47 +322,56 @@ public class HomeController extends ControllerClass implements Initializable {
                 }
 
                 contextMenu.show(mytreetable, event.getScreenX(), event.getScreenY()); //show the context menu at the X Y location of the right click
-            }
         });
+
 
 ///////////////////////////////////// Set up the buttons ////////////////////////////////////////////////
 
-        matrixButton.setOnAction(new EventHandler<ActionEvent>() {//on button click, go to matrix scene
-            @Override
-            public void handle(ActionEvent event) {
+        //go to matrix scene when button is clicked
+        matrixButton.setOnAction(event-> {
                 try {
                     Main.switchesMatrix++;
                     goToMatrix(event);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-
-            }
         });
 
-        cnButton.setOnAction(new EventHandler<ActionEvent>() {//on button click, go to CN scene
-            @Override
-            public void handle(ActionEvent event) {
+        //go to CN scene when button is clicked
+        cnButton.setOnAction(event-> {
                 try {
                     Main.switchesCN++;
                     goToCN(event);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-
-            }
         });
 
-        traceBttn.setOnAction(new EventHandler<ActionEvent>() {//on button click, go to home scene
-            @Override
-            public void handle(ActionEvent event) {
+        //trace to a CN when the button is clicked and an FR is selected
+        traceBttn.setOnAction(event-> {
                 try {
                     //Main.switchesCN++;
                     traceToCN(event);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+        });
 
+        saveBttn.setOnAction(event-> {
+            try{
+                saveDatabase();
+
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+        });
+
+        reloadBttn.setOnAction(event-> {
+            try{
+                reloadSession();
+            }
+            catch (Exception e){
+                e.printStackTrace();
             }
         });
 
@@ -554,7 +435,16 @@ public class HomeController extends ControllerClass implements Initializable {
             newID = clickedID + "." + Integer.toString(numChild + 1);
         }
 
+        int numDots = newID.length() - newID.replace(".", "").length();
+        int depth = numDots+1;
+
+        boolean tof = recursiveExpand(-1, mytreetable.getRoot(), depth);
+        if(tof){
+            treeColID.setPrefWidth(treeColID.getPrefWidth() + 20);
+        }
+
         addRowInfo(newID, numChild, clicked);
+
     }
 
 
@@ -572,23 +462,23 @@ public class HomeController extends ControllerClass implements Initializable {
         Button cancel = new Button("Cancel");
         Stage stage = new Stage();
         VBox box = new VBox(20);
-        box.getChildren().addAll(lab, delete, cancel);
+        HBox hbox = new HBox(20);
+        box.setAlignment(Pos.CENTER);
+        hbox.setAlignment(Pos.CENTER);
+        lab.setWrapText(true);
+        lab.setMaxWidth(275);
+
+        box.getChildren().addAll(lab, hbox);
+        hbox.getChildren().addAll(delete, cancel);
         Scene scene = new Scene(box, 300, 200);
         stage.setScene(scene);
         stage.show();
 
 
-        cancel.setOnAction(new EventHandler<ActionEvent>() { //if they cancel
-            @Override
-            public void handle(ActionEvent event) {
-                stage.close();
-            }
-        });
+        cancel.setOnAction(event-> stage.close());
 
 
-        delete.setOnAction(new EventHandler<ActionEvent>() { //when they submit their edited DP
-            @Override
-            public void handle(ActionEvent event) {
+        delete.setOnAction(event-> {
                 parent.getChildren().remove(clicked); //remove it (and all its children) from the tree
 
                 //now we have to delete it and all its children from the database
@@ -611,12 +501,7 @@ public class HomeController extends ControllerClass implements Initializable {
                 //By sorting the array, we can start with the entry with the highest DPID and work our way down to the lowest,
                 //that way every entry that needs to be deleted will have the correct DPID in the database until it is deleted
 
-                Arrays.sort(delEnts, new Comparator<Entry>() {
-                    @Override
-                    public int compare(Entry o1, Entry o2) {
-                        return Integer.compare(o1.DPID, o2.DPID);
-                    }
-                });
+                Arrays.sort(delEnts, Comparator.comparingInt(Entry :: getDPID));
 
                 autoDPID = autoDPID - delEnts.length; //reset the DPID auto incrementer so the next new entry has the right DPID
 
@@ -633,6 +518,16 @@ public class HomeController extends ControllerClass implements Initializable {
                     String sql4 = "UPDATE DP SET DPID = DPID-1 WHERE DPID > " + ent.DPID + ";";
                     String sql8 = "UPDATE CNFRLink SET DPID = DPID-1 WHERE DPID > " + ent.DPID + ";";
 
+                    String sql9 = "DELETE FROM MatrixCell WHERE DPIDfr = " + ent.DPID + ";";
+                    String sql10 = "DELETE FROM MatrixCell WHERE DPIDdp = " + ent.DPID + ";";
+                    String sql11 = "UPDATE MatrixCell SET DPIDfr = DPIDfr-1 WHERE DPIDfr > " + ent.DPID + ";";
+                    String sql12 = "UPDATE MatrixCell SET DPIDdp = DPIDdp-1 WHERE DPIDdp > " + ent.DPID + ";";
+
+                    String sql13 = "SELECT matrixcolumn FROM MatrixCell WHERE DPIDdp = " + ent.DPID + ";";
+                    int rowcol = getResult(sql13);
+                    String sql14 = "UPDATE MatrixCell SET matrixrow = matrixrow-1 WHERE matrixrow > " + rowcol + ";";
+                    String sql15 = "UPDATE MatrixCell SET matrixcolumn = matrixcolumn-1 WHERE matrixcolumn > " + rowcol + ";";
+
                     executeDatabaseU(sql);
                     executeDatabaseU(sql2);
                     executeDatabaseU(sql7);
@@ -640,6 +535,13 @@ public class HomeController extends ControllerClass implements Initializable {
                     executeDatabaseU(sql3);
                     executeDatabaseU(sql4);
                     executeDatabaseU(sql8);
+
+                    executeDatabaseU(sql9);
+                    executeDatabaseU(sql10);
+                    executeDatabaseU(sql11);
+                    executeDatabaseU(sql12);
+                    executeDatabaseU(sql14);
+                    executeDatabaseU(sql15);
                 }
 
                 recursiveDisplayNum(parent, parent.getValue().displayNum);
@@ -647,7 +549,6 @@ public class HomeController extends ControllerClass implements Initializable {
                 refreshData(); //updates the entry objects so they match the database
                 buildTree(); //rebuilds the tree with the new entry objects
                 stage.close();
-            }
         });
     }
 
@@ -659,7 +560,7 @@ public class HomeController extends ControllerClass implements Initializable {
      * @param clicked  the TreeItem for the parent that we are adding a child to
      */
     private void addRowInfo(String newID, int numChild, TreeItem<Entry> clicked) {
-        DP newDP = new DP(" ", getAutoDPID(), 0, 1);
+        DP newDP = new DP(" ", getAutoDPID(), 0, true);
         DP[] dpList = new DP[1];
         dpList[0] = newDP;
 
@@ -698,10 +599,6 @@ public class HomeController extends ControllerClass implements Initializable {
         return delEnts; //return the delete list
     }
 
-    //pDisplayNum is the parent's new displayNum. The first time the function is called, pDisplayNum is just passed in
-    // as parent.getValue().displayNum, because the parent of the deleted object will keep it's display number. In the
-    //recursive calls after the first time, pDisplayNum is the newID variable
-
     /**
      * Recursively changes the displayNum of the given TreeItem<Entry> object and all its children. Called in the
      * deleteRow() function
@@ -713,7 +610,7 @@ public class HomeController extends ControllerClass implements Initializable {
     private void recursiveDisplayNum(TreeItem<Entry> parent, String pDisplayNum) {
         //I used the TreeItem instead of the Entry item so I could get this list of children
         ObservableList<TreeItem<Entry>> children = parent.getChildren();
-        String sql = "";
+        String sql;
         if (parent.getValue().DPID == 0) { //displayNum is set differently for children of 0
             for (TreeItem<Entry> entry : children) {
                 int i = children.indexOf(entry);
@@ -731,6 +628,35 @@ public class HomeController extends ControllerClass implements Initializable {
             }
         }
     }
+
+    /**
+     * Called when adding a new child. Recursively goes through the TreeTableView to see if there are any nodes
+     * at the given depth. If there are no nodes at the given depth, the function returns true to indicate that
+     * the ID column of the TreeTableView must be expanded (made wider) so there is enough room to display the ID.
+     * @param currDepth int to keep track of what layer of the TreeTableView we're currently searching through
+     * @param parent TreeItem<Entry> the node whose children we're looking at
+     * @param depth int - the depth at which we are checking for nodes, the depth of the new child being added
+     * @return true if there are no nodes at the given depth, false if there are nodes at the given depth
+     */
+    private boolean recursiveExpand(int currDepth, TreeItem<Entry> parent, int depth){
+
+        currDepth++; //what level of the tree we're currently on
+
+        if(currDepth >= depth){ //if currDepth is greater than or equal to the depth of the new child,
+            return false; //then the column was already expanded to accomodate this depth so we don't need to expand it more
+        }
+        else{ //if the current depth is less than the depth of the new child
+            ObservableList<TreeItem<Entry>> children = parent.getChildren(); //search its children
+
+            for (TreeItem<Entry> child : children) {
+                boolean tof = recursiveExpand(currDepth, child, depth); //see if the children are at the new child's depth
+                if(!tof){ //if it returns false, it means there's already a node at the new child's depth
+                    return false; //so we don't need to expand the column
+                }
+            }
+        }
+        return true; //if we get here, it means we went through every node in the tree and none were at the new child's depth
+    }                //so expand the column
 
 
 
@@ -756,8 +682,8 @@ public class HomeController extends ControllerClass implements Initializable {
 
         //loads the scene
         FXMLLoader loader = new FXMLLoader();
-        System.out.println("about to load");
-        loader.setLocation(getClass().getResource("../FXML/rand.fxml"));
+        //System.out.println("about to load");
+        loader.setLocation(getClass().getResource("/FXML/rand.fxml"));
         //loader.setController(MatrixController.getMatrixInstance());
         Parent P = loader.load();
         Scene s = new Scene(P, 1000, 750);
@@ -780,9 +706,7 @@ public class HomeController extends ControllerClass implements Initializable {
 
         //loads the scene
         FXMLLoader loader = new FXMLLoader();
-        //System.out.println("about to load");
-        loader.setLocation(getClass().getResource("../FXML/CustomerNeeds.fxml"));
-        //loader.setController(MatrixController.getMatrixInstance());
+        loader.setLocation(getClass().getResource("/FXML/CustomerNeeds.fxml"));
         Parent P = loader.load();
         Scene s = new Scene(P, 1000, 500);
 
@@ -819,28 +743,9 @@ public class HomeController extends ControllerClass implements Initializable {
         refreshData(); //refreshes the Entry object information from the database, fills the FRDP list
         refreshCNData(); //refreshes the CN object information from the database, fills the cnList
 
-        //int clickedEntID = mytreetable.getSelectionModel().getSelectedItem().getValue().DPID; //get the CN that is selected
-        //Entry clickedEnt = new Entry("Dummy", new DP[0], "", -1, -1, -1);
         if(mytreetable.getSelectionModel().getSelectedItem() == null) {
-            Stage stage = new Stage();
-            VBox dialogVbox = new VBox(20);
-            dialogVbox.setAlignment(Pos.CENTER);
-            Label lab = new Label("Error: There is no FR selected. Please select the FR you would like to trace.");
-            Button b = new Button("OK");
-            lab.setWrapText(true);
-            lab.setMaxWidth(275);
-            dialogVbox.setAlignment(Pos.CENTER);
-            dialogVbox.getChildren().addAll(lab, b);
-            b.setOnAction(new EventHandler<ActionEvent>() {
-                @Override
-                public void handle(ActionEvent event) {
-                    stage.close();
-                }
-            });
-
-            Scene dialogScene = new Scene(dialogVbox, 300, 200);
-            stage.setScene(dialogScene);
-            stage.show();
+            String error = "Error: There is no FR selected. Please select the FR you would like to trace.";
+            errorPopup(error);
         }
         else {
             Entry clickedEnt = mytreetable.getSelectionModel().getSelectedItem().getValue();
@@ -856,24 +761,8 @@ public class HomeController extends ControllerClass implements Initializable {
             if (clickedEnt.getCNList().length > 1) { //if the selected FR can be traced to more than one CN
                 cn = pickCNPopup(clickedEnt); //create a popup and have the user select which CN they'd like to trace to
                 if(cn == null){
-                    Stage stage2 = new Stage();
-                    VBox dialogVbox2 = new VBox(20);
-                    Label lab2 = new Label("Error: No CN selected. Tracing could not be completed.");
-                    lab2.setMaxWidth(275);
-                    lab2.setWrapText(true);
-                    dialogVbox2.setAlignment(Pos.CENTER);
-                    Button b2 = new Button("OK");
-                    dialogVbox2.getChildren().addAll(lab2, b2);
-                    b2.setOnAction(new EventHandler<ActionEvent>() {
-                        @Override
-                        public void handle(ActionEvent event) {
-                            stage2.close();
-                        }
-                    });
-
-                    Scene dialogScene = new Scene(dialogVbox2, 300, 200);
-                    stage2.setScene(dialogScene);
-                    stage2.show();
+                    String error = "Error: No CN selected. Tracing could not be completed.";
+                    errorPopup(error);
                     return;
                 }
             }
@@ -881,31 +770,15 @@ public class HomeController extends ControllerClass implements Initializable {
                 cn = clickedEnt.getCNList()[0]; //grab that CN
             }
             else { //if there are no CNs linked to this FR, tell the user to link it to CNs
-                Stage stage = new Stage();
-                VBox dialogVbox = new VBox(20);
-                Label lab = new Label("Error: The selected FR is not linked to any CNs.");
-                Button b = new Button("OK");
-                lab.setWrapText(true);
-                lab.setMaxWidth(275);
-                dialogVbox.setAlignment(Pos.CENTER);
-                dialogVbox.getChildren().addAll(lab, b);
-                b.setOnAction(new EventHandler<ActionEvent>() {
-                    @Override
-                    public void handle(ActionEvent event) {
-                        stage.close();
-                    }
-                });
-
-                Scene dialogScene = new Scene(dialogVbox, 300, 200);
-                stage.setScene(dialogScene);
-                stage.show();
+                String error = "Error: The selected FR is not linked to any CNs.";
+                errorPopup(error);
                 return;
             }
 
             //load up the FR spreadsheet (home) page and focus on the selected FR
             Main.switchesCN++;
             FXMLLoader loader = new FXMLLoader();
-            loader.setLocation(getClass().getResource("../FXML/CustomerNeeds.fxml"));
+            loader.setLocation(getClass().getResource("/FXML/CustomerNeeds.fxml"));
             Parent P = loader.load();
             Scene s = new Scene(P, 1000, 500);
 
@@ -924,9 +797,8 @@ public class HomeController extends ControllerClass implements Initializable {
     /**
      * Called by traceToFR() to open a popup with a list of FRs that the user can trace to. Records the user's selection
      * @param entry the Entry that the user selected to trace from
-     * @throws IOException
      */
-    private CN pickCNPopup(Entry entry) throws IOException{
+    private CN pickCNPopup(Entry entry){
         //open a popup with a list of CNs linked to the selected FR and have the user pick which one to trace to
         Stage stage = new Stage();
         VBox dialogVbox = new VBox(20);
@@ -935,19 +807,9 @@ public class HomeController extends ControllerClass implements Initializable {
         TableColumn<CN, String> frCol = new TableColumn<>("CN");
         frCol.setPrefWidth(250);
 
-        displayNumCol.setCellValueFactory(new Callback<TableColumn.CellDataFeatures<CN, String>, ObservableValue<String>>() {
-            public ObservableValue<String> call(TableColumn.CellDataFeatures<CN, String> p) {
-                // p.getValue() returns the Person instance for a particular TableView row
-                return new SimpleStringProperty(p.getValue().getDisplayID());
-            }
-        });
+        displayNumCol.setCellValueFactory(p->new SimpleStringProperty(p.getValue().getDisplayID()));
 
-        frCol.setCellValueFactory(new Callback<TableColumn.CellDataFeatures<CN, String>, ObservableValue<String>>() {
-            public ObservableValue<String> call(TableColumn.CellDataFeatures<CN, String> p) {
-                // p.getValue() returns the Person instance for a particular TableView row
-                return new SimpleStringProperty(p.getValue().getCn());
-            }
-        });
+        frCol.setCellValueFactory(p-> new SimpleStringProperty(p.getValue().getCn()));
 
         list.getColumns().add(displayNumCol);
         list.getColumns().add(frCol);
@@ -965,37 +827,18 @@ public class HomeController extends ControllerClass implements Initializable {
         dialogVbox.getChildren().addAll(lab, list, b); //add list to VBox
 
         CN[] returnCN = new CN[1];
-        b.setOnAction(new EventHandler<ActionEvent>(){
-            @Override
-            public void handle(ActionEvent event) {
+        b.setOnAction(event-> {
                 if(list.getSelectionModel().getSelectedItem() == null){
-                    Stage stage2 = new Stage();
-                    VBox dialogVbox2 = new VBox(20);
-                    Label lab2 = new Label("Error: Please select the CN you would like to trace to.");
-                    lab2.setMaxWidth(275);
-                    lab2.setWrapText(true);
-                    dialogVbox2.setAlignment(Pos.CENTER);
-                    Button b2 = new Button("OK");
-                    dialogVbox2.getChildren().addAll(lab2, b2);
-                    b2.setOnAction(new EventHandler<ActionEvent>() {
-                        @Override
-                        public void handle(ActionEvent event) {
-                            stage2.close();
-                        }
-                    });
-
-                    Scene dialogScene = new Scene(dialogVbox2, 300, 200);
-                    stage2.setScene(dialogScene);
-                    stage2.show();
+                    String error = "Error: Please select the CN you would like to trace to.";
+                    errorPopup(error);
                 }
                 else {
                     CN cn = list.getSelectionModel().getSelectedItem();
                     returnCN[0] = cn;
                     stage.close();
                 }
-
-            }
         });
+
         Scene dialogScene = new Scene(dialogVbox, 300, 300);
         stage.setScene(dialogScene);
         if (!stage.isShowing()) {
@@ -1013,7 +856,7 @@ public class HomeController extends ControllerClass implements Initializable {
      * Called from the CNController when the user wants to trace a CN to an FR on this page
      * @param DPID the DPID of the FR they are tracing
      */
-    public void findFR0(int DPID){
+    void findFR0(int DPID){
         Entry e = new Entry("BAD", new DP[0], " ", -1, -1, -1);
         TreeItem<Entry> frdp0 = new TreeItem<>(e); //dummy value for the first tree item
         for(TreeItem<Entry> entry : treeData){
@@ -1027,7 +870,6 @@ public class HomeController extends ControllerClass implements Initializable {
         //and find the row number of the FR we are tracing. In the TreeTableView, a parent is always followed by
         //its children, so we need to start at the top and search through the tree BFS style to get the row number
         rowArr = recursiveFindFR(frdp0, rowArr, DPID); //pass that root tree item into the recursive function to find what row we want to focus on
-        //System.out.println("HC row: " + row);
         mytreetable.getFocusModel().focus(rowArr[1], treeColFR); //focus on that row
         mytreetable.scrollTo(rowArr[1]); //scroll to it
     }
@@ -1040,18 +882,18 @@ public class HomeController extends ControllerClass implements Initializable {
      * @param DPID the ID number of the TreeItem<Entry> object we are searching for
      * @return the row number of the TreeItem<Entry> object we are searching for
      */
-    public int[] recursiveFindFR(TreeItem<Entry> parent, int[] row, int DPID){
+    private int[] recursiveFindFR(TreeItem<Entry> parent, int[] row, int DPID){
         ObservableList<TreeItem<Entry>> children = parent.getChildren(); //get all the children of the given parent
 
-        System.out.println(parent.getValue().DPID);
-        System.out.println(row[1]);
+        //System.out.println(parent.getValue().DPID);
+        //System.out.println(row[1]);
 
         if(DPID == 0){ //if we're tracing to the first row, just go there
             row[0] = 1;
             return row;
         }
         for(TreeItem<Entry> entry : children){
-            System.out.println("Looking at " + parent.getValue().displayNum + "'s child: " + entry.getValue().DPID);
+            //System.out.println("Looking at " + parent.getValue().displayNum + "'s child: " + entry.getValue().DPID);
             row[1]++; //every time we look at a new child, it's another row down
             if(entry.getValue().DPID == DPID){ //is this the FR we're tracing to?
                 row[0] = 1;
@@ -1163,11 +1005,10 @@ public class HomeController extends ControllerClass implements Initializable {
         int len = dpList.length;
 
         if (!remove) {
-            String[] dpString = new String[len + 2];
-            dpString[0] = "Add New DP...";
-            dpString[1] = "Change DP...";
+            String[] dpString = new String[len + 1];
+            dpString[0] = "Edit DPs...";
             for (int i = 0; i < len; i++) {
-                dpString[i + 2] = dpList[i].getDp();
+                dpString[i + 1] = dpList[i].getDp();
             }
             return dpString;
         } else {
@@ -1180,25 +1021,626 @@ public class HomeController extends ControllerClass implements Initializable {
         }
     }
 
+
     /**
-     * Updates the database with a change made to a DP by the user
+     * Creates a popup window for users to add new DPs and see, edit, or delete existing DPs
      *
-     * @param entry    the entry object in the row that was edited
-     * @param changeDP the string that holds the new value that the dp is being changed to
+     * @param dialog the stage that the popup window is displayed on. It is declared outside of this function because
+     *               I found that sometimes the stage would be declared more than once, making many popup windows
+     * @param entry the Entry object to which the DPs that we're editing belong to
+     * @param combo the combobox that displays all the DPs in the TreeTableView
      */
+    private void DPEditor(Stage dialog, Entry entry, ComboBox combo){
+        VBox dialogVbox = new VBox(20);
+        //dialogVbox.setAlignment(Pos.CENTER);
 
-    private void updateDP(Entry entry, String changeDP) {
-        String sql = "UPDATE DP SET DP = '" + changeDP + "' WHERE DPID = " + entry.DPID + " AND count = " + entry.getDP()[0].getCount();
-        String sql3 = "UPDATE DP SET isPrimary = 1 WHERE DPID = " + entry.DPID + " AND count = " + entry.getDP()[0].getCount();
-        String sql2 = "UPDATE DP SET isPrimary = 0 WHERE isPrimary = 1 AND DPID = " + entry.getDPID() + ";";
+        //First, set up a table with all this Entry's DPs
+        ObservableList<DP> tableList =  FXCollections.observableArrayList(entry.getDP()); //display all this Entry's DPs
+        TableView<DP> table = new TableView<>();
 
-        //the order that these are executed matters (I think)
-        executeDatabaseU(sql2);
-        executeDatabaseU(sql);
-        executeDatabaseU(sql3);
+        TableColumn<DP, String> displayNumCol = new TableColumn<>("#");
+        TableColumn<DP, String> dpCol = new TableColumn<>("DP");
+        TableColumn<DP, CheckBox> checkCol = new TableColumn<>("Primary");
+
+        displayNumCol.setPrefWidth(60);
+        dpCol.setPrefWidth(270);
+        checkCol.setPrefWidth(60);
+
+        displayNumCol.setCellValueFactory(p-> new SimpleStringProperty(Integer.toString(p.getValue().getCount())));
+        dpCol.setCellValueFactory(p-> new SimpleStringProperty(p.getValue().getDp()));
+
+        table.getColumns().add(displayNumCol);
+        table.getColumns().add(dpCol);
+        table.getColumns().add(checkCol);
+        table.getItems().addAll(tableList);
+
+        //Allows users to edit a DP
+        table.setEditable(true);
+        dpCol.setCellFactory(TextFieldTableCell.forTableColumn());
+
+        //this adds checkboxes to the "Primary" column
+        checkCol.setCellValueFactory(new Callback<TableColumn.CellDataFeatures<DP, CheckBox>, ObservableValue<CheckBox>>() {
+
+            @Override
+            public ObservableValue<CheckBox> call(TableColumn.CellDataFeatures<DP, CheckBox> arg0) {
+                DP dp = arg0.getValue(); //gets the DP object that was checked
+
+                CheckBox checkBox = new CheckBox();
+
+                checkBox.selectedProperty().setValue(dp.getIsPrimary()); //checkbox is based off the DP's "isPrimary" boolean value
+
+                checkBox.selectedProperty().addListener(new ChangeListener<Boolean>() {
+                    public void changed(ObservableValue<? extends Boolean> ov,
+                                        Boolean old_val, Boolean new_val) {
+
+                        if (new_val) { //if it's being checked AKA switched from false to true
+
+                            for(DP d : entry.getDP()) { //go through all the DPs
+                                if (d.getCount() == dp.getCount()) { //if this is the DP that is changing to primary
+                                    d.setIsPrimary(new_val); //change it
+                                }
+                                else if(d.getIsPrimary()){ //if this is the old primary DP
+                                    d.setIsPrimary(false); //change it
+                                }
+                            }
+
+                            //refresh the data in the list so the checkboxes update
+                            table.getItems().clear();
+                            tableList.clear();
+                            tableList.addAll(entry.getDP());
+                            table.getItems().addAll(tableList);
 
 
+                            //update changes in the database
+                            String sql = "UPDATE DP SET isPrimary = 0 WHERE isPrimary = 1 AND DPID = " + dp.getDPId() + ";";
+                            String sql2 = "UPDATE DP SET isPrimary = 1 WHERE DPID = " + dp.getDPId() + " AND COUNT = " + dp.getCount() + ";";
+                            executeDatabaseU(sql);
+                            executeDatabaseU(sql2);
+                        }
+                        else{ //if they're trying to uncheck a DP
+                            checkBox.selectedProperty().setValue(old_val); //don't let them, there should always be a primary dp
+                        }
+
+
+                    }
+                });
+
+                return new SimpleObjectProperty<CheckBox>(checkBox);
+
+            }
+
+        });
+
+        //When a user edits a DP
+        dpCol.setOnEditCommit(event->{
+            DP oldDP = event.getRowValue(); //gets the DP object that is being edited
+            combo.getItems().remove(oldDP.getDp()); //remove old value from combobox on the TreeTableView
+            oldDP.setDp(event.getNewValue()); //sets the new DP
+            combo.getItems().add(event.getNewValue()); //adds the new DP to the combobox on the TreeTableView
+
+            String temp = event.getNewValue();
+            temp = temp.replace("'","''"); //if the user puts an apostrophe this stops an error from the database
+
+            //update the FR in the database
+            String sql = "UPDATE DP SET DP = '" + temp + "' WHERE DPID = " + oldDP.getDPId() + " AND count = " + oldDP.getCount() + ";";
+            executeDatabaseU(sql);
+        });
+
+
+        Button add = new Button(); //add a DP
+        Button rem = new Button(); //remove a DP
+        Button done = new Button(); //close the popup
+        add.setText("+");
+        add.setPrefSize(30, 30);
+        rem.setText("-");
+        rem.setPrefSize(30, 30);
+        done.setText("Done");
+        dialogVbox.getChildren().addAll(table, add, rem, done);
+        Scene dialogScene = new Scene(dialogVbox, 400, 400);
+        dialog.setScene(dialogScene);
+        if (!dialog.isShowing()) {
+            dialog.show(); //show the popup window
+        }
+
+        //position the buttons
+        rem.setTranslateX(30);
+        rem.setTranslateY(-67);
+        add.setTranslateY(-20);
+        add.setPrefSize(20, 20);
+        rem.setPrefSize(20,20);
+
+        //Adding a DP
+        add.setOnAction(event-> {
+            try {
+                entry.addDP(" ");//update the DP list in the Entry object by adding a blank DP
+                int len = entry.getDP().length;
+                table.getItems().add(entry.getDP()[len-1]); //add the blank DP row  to the table
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        });
+
+        //Removing a DP
+        rem.setOnAction(event-> {
+            try {
+                DP selected = table.getSelectionModel().getSelectedItem();
+                combo.getItems().remove(selected.getDp());
+                table.getItems().remove(selected);
+                String sql = "DELETE FROM DP WHERE DPID = " + selected.getDPId() + " AND count = " + selected.getCount();
+                executeDatabaseU(sql);
+
+                String sql2 = "UPDATE DP SET count = count-1 WHERE DPID = " + selected.getDPId() + " AND count > " + selected.getCount() + ";";
+                executeDatabaseU(sql2);
+
+                entry.removeDP(selected.getCount());
+                table.getItems().clear();
+                tableList.clear();
+                tableList.addAll(entry.getDP());
+                table.getItems().addAll(tableList);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+
+        });
+
+        //Close the popup
+        done.setOnAction(event-> {
+            try{
+                combo.setValue(entry.getPrimaryDP().getDp()); //display the primary DP
+                dialog.close();
+            }
+            catch(Exception e){
+                e.printStackTrace();
+            }
+        });
     }
+
+
+    /**
+     * Saves everything from the database into csv file that can later be reloaded into the application so
+     * the user can save their decompositions
+     */
+    private void saveDatabase(){
+        try{
+            //make a popup for users to name their file, or save it to an existing file
+            Stage stage = new Stage();
+            VBox dialogVbox = new VBox(20);
+            dialogVbox.setAlignment(Pos.CENTER);
+            Label lab = new Label("Please enter a name for your new file or select a previously saved file.");
+            TextField txt = new TextField();
+            Button b = new Button("Submit");
+            lab.setWrapText(true);
+            lab.setMaxWidth(375);
+            dialogVbox.setAlignment(Pos.CENTER);
+
+            //get the directory where the csv files will be saved
+            File dir = new File("previous_sessions"); //PATH FOR JAR
+            //File dir = new File("src/previous_sessions"); //PATH FOR INTELLIJ
+            String[] pathnames = dir.list(); //get a list of csv files already saved in the directory
+            ObservableList<String> tableList =  FXCollections.observableArrayList(pathnames); //display the file names in the list
+            ListView<String> list = new ListView<>(tableList);
+
+            dialogVbox.getChildren().addAll(lab, txt, list, b);
+            //name[0] = name of file they entered/selected
+            //name[1] = true if they selected existing file, false if they entered a new file name
+            String[] name = new String[2];
+
+            b.setOnAction(e-> {
+                if(txt.getText().equals("") || txt.getText().equals(" ")){ //if they didn't enter text
+                    String selected = list.getSelectionModel().getSelectedItem(); //they must have selected something
+                    if(selected == null){ //throw an error if they didn't select anything
+                        String error = "Error: Please enter a name to save this as a new file, or select an existing file to save to.";
+                        errorPopup(error);
+                        return;
+                    }
+                    else{ //if they did select something
+                        name[0] = selected; //save the file name they selected
+                        name[1] = "true"; //indicates that they selected a file
+                    }
+                }
+                else{ //if they entered text
+                    for(String s : pathnames){
+                        if((txt.getText() + ".csv").equals(s)){
+                            String error = "Error: A file with that name already exists. Please enter a different name.";
+                            errorPopup(error);
+                            return;
+                        }
+                    }
+                    name[0] = txt.getText(); //save it
+                    name[1] = "false";
+                }
+                stage.close();
+
+            });
+
+            Scene dialogScene = new Scene(dialogVbox, 400, 500);
+            stage.setScene(dialogScene);
+            stage.showAndWait(); //wait for the user to select/enter file name
+
+            if(name[0] == null){
+                return;
+            }
+
+            File file;
+            if(name[1].equals("true")){ //if they selected an existing file to save to
+                //file = new File("src/previous_sessions/"+name[0]); //PATH FOR INTELLIJ
+                file = new File("previous_sessions/"+name[0]); //PATH FOR JAR
+                boolean booly = file.delete(); //delete the file that already exists, we're gonna replace it
+                //System.out.println("File Deleted: " + booly);
+            }
+            else{ //if they entered a new name, save it and throw ".csv" on the end
+                file = new File("previous_sessions/" + name[0] + ".csv"); //PATH FOR JAR
+                //file = new File("src/previous_sessions/" + name[0] + ".csv"); //PATH FOR INTELLIJ
+            }
+            boolean bool = file.createNewFile(); //make a new file with the given/chosen name
+            System.out.println("File Created: " + bool);
+
+            String url_ = "jdbc:mariadb://localhost:3306/mysql";
+            String usr = "root";
+            String pwd = "root";
+            Connection myconn = DriverManager.getConnection(url_, usr, pwd);
+            Statement stmt = myconn.createStatement();
+
+            //get EVERYTHING from the database
+            String sql = "SELECT * FROM Entry";
+            String sql2 = "SELECT * FROM DP";
+            String sql3 = "SELECT * FROM MatrixCell";
+            String sql4 = "SELECT * FROM CN";
+            String sql5 = "SELECT * FROM CNFRLink";
+            ResultSet rs = stmt.executeQuery(sql);
+            ResultSet rs2 = stmt.executeQuery(sql2);
+            ResultSet rs3 = stmt.executeQuery(sql3);
+            ResultSet rs4 = stmt.executeQuery(sql4);
+            ResultSet rs5 = stmt.executeQuery(sql5);
+
+            PrintWriter writer = new PrintWriter(file);
+
+            int firstRow = 1; //1 means this is the first row and we need to put the column names
+            while(rs.next()){ //ENTRY TABLE
+                if(firstRow == 1){
+                    writer.append("* \n"); // asterisk (*) indicates beginning of new table, helpful for reloading
+                    writer.append("FR");
+                    writer.append(",");
+                    writer.append("DPID");
+                    writer.append(",");
+                    writer.append("displayNum");
+                    writer.append(",");
+                    writer.append("numChildren");
+                    writer.append(",");
+                    writer.append("parentID");
+                    writer.append("\n");
+                    writer.append(rs.getString("FR"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs.getInt("DPID")));
+                    writer.append(",");
+                    writer.append(rs.getString("displayNum"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs.getInt("numChildren")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs.getInt("parentID")));
+                    writer.append("\n");
+                    firstRow = 0; //0 means it's not the first row
+                }
+                else{ //if it's not the first row, just put in the data
+                    writer.append(rs.getString("FR"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs.getInt("DPID")));
+                    writer.append(",");
+                    writer.append(rs.getString("displayNum"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs.getInt("numChildren")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs.getInt("parentID")));
+                    writer.append("\n");
+                }
+            }
+
+            firstRow = 1;
+            while(rs2.next()){ //DP TABLE
+                if(firstRow == 1){
+                    writer.append("\n");
+                    writer.append("* \n");
+                    writer.append("DPID");
+                    writer.append(",");
+                    writer.append("DP");
+                    writer.append(",");
+                    writer.append("count");
+                    writer.append(",");
+                    writer.append("isPrimary");
+                    writer.append("\n");
+                    writer.append(Integer.toString(rs2.getInt("DPID")));
+                    writer.append(",");
+                    writer.append(rs2.getString("DP"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs2.getInt("count")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs2.getInt("isPrimary")));
+                    writer.append("\n");
+                    firstRow = 0;
+                }
+                else{
+                    writer.append(Integer.toString(rs2.getInt("DPID")));
+                    writer.append(",");
+                    writer.append(rs2.getString("DP"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs2.getInt("count")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs2.getInt("isPrimary")));
+                    writer.append("\n");
+                }
+            }
+
+            firstRow = 1;
+            while(rs3.next()){ //MATRIXCELL TABLE
+                if(firstRow == 1){
+                    writer.append("\n");
+                    writer.append("* \n");
+                    writer.append("matrixrow");
+                    writer.append(",");
+                    writer.append("matrixcolumn");
+                    writer.append(",");
+                    writer.append("DPIDfr");
+                    writer.append(",");
+                    writer.append("equation");
+                    writer.append(",");
+                    writer.append("DPCount");
+                    writer.append(",");
+                    writer.append("DPIDdp");
+                    writer.append(",");
+                    writer.append("symbol");
+                    writer.append("\n");
+                    writer.append(Integer.toString(rs3.getInt("matrixrow")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("matrixcolumn")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("DPIDfr")));
+                    writer.append(",");
+                    writer.append(rs3.getString("equation"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("DPcount")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("DPIDdp")));
+                    writer.append(",");
+                    writer.append(rs3.getString("symbol"));
+                    writer.append("\n");
+                    firstRow = 0;
+                }
+                else{
+                    writer.append(Integer.toString(rs3.getInt("matrixrow")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("matrixcolumn")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("DPIDfr")));
+                    writer.append(",");
+                    writer.append(rs3.getString("equation"));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("DPcount")));
+                    writer.append(",");
+                    writer.append(Integer.toString(rs3.getInt("DPIDdp")));
+                    writer.append(",");
+                    writer.append(rs3.getString("symbol"));
+                    writer.append("\n");
+                }
+            }
+
+            firstRow = 1;
+            while(rs4.next()){ //CN TABLE
+                if(firstRow == 1){
+                    writer.append("\n");
+                    writer.append("* \n");
+                    writer.append("cn");
+                    writer.append(",");
+                    writer.append("displayID");
+                    writer.append(",");
+                    writer.append("parentID");
+                    writer.append("\n");
+                    writer.append(rs4.getString("cn"));
+                    writer.append(",");
+                    writer.append(rs4.getString("displayID"));
+                    writer.append(",");
+                    writer.append(rs4.getString("parentID"));
+                    writer.append("\n");
+                    firstRow = 0;
+                }
+                else{
+                    writer.append(rs4.getString("cn"));
+                    writer.append(",");
+                    writer.append(rs4.getString("displayID"));
+                    writer.append(",");
+                    writer.append(rs4.getString("parentID"));
+                    writer.append("\n");
+                }
+            }
+
+            firstRow = 1;
+            while(rs5.next()){ //CNFRLINK TABLE
+                if(firstRow == 1){
+                    writer.append("\n");
+                    writer.append("* \n");
+                    writer.append("DPID");
+                    writer.append(",");
+                    writer.append("CNdisplayID");
+                    writer.append("\n");
+                    writer.append(Integer.toString(rs5.getInt("DPID")));
+                    writer.append(",");
+                    writer.append(rs5.getString("CNdisplayID"));
+                    writer.append("\n");
+                    firstRow = 0;
+                }
+                else{
+                    writer.append(Integer.toString(rs5.getInt("DPID")));
+                    writer.append(",");
+                    writer.append(rs5.getString("CNdisplayID"));
+                    writer.append("\n");
+                }
+            }
+
+            writer.flush();
+            writer.close();
+            myconn.close();
+
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Allows user to open a previously saved session back into the application
+     */
+    private void reloadSession(){
+        //go to the directory where previous sessions are saved
+        File dir = new File("previous_sessions"); //PATH FOR JAR
+        //File dir = new File("src/previous_sessions"); //PATH FOR INTELLIJ
+        String[] pathnames = dir.list(); //get a list of all the previously saved files
+        Stage stage = new Stage();
+        VBox dialogVbox = new VBox(20);
+        Label lab = new Label("Please select the file you would like to reload.");
+        ObservableList<String> tableList =  FXCollections.observableArrayList(pathnames); //display all files
+        ListView<String> list = new ListView<>(tableList);
+        Button butt = new Button("Done");
+        dialogVbox.getChildren().addAll(lab, list, butt);
+        Scene dialogScene = new Scene(dialogVbox, 400, 400);
+        stage.setScene(dialogScene);
+        if (!stage.isShowing()) {
+            stage.show(); //show the popup window
+        }
+
+        butt.setOnAction(event-> {
+            String chosenFile = list.getSelectionModel().getSelectedItem(); //get the selected file
+            File[] temp = new File[1];
+            if(chosenFile == null){ //throw an error if they didn't select a file
+                String error = "Error: No file was selected to reload. Please select a file.";
+                errorPopup(error);
+            }
+            else { //if they selected a file
+                File reloadFile = new File(chosenFile); //save it so we can open and read it
+                temp[0] = reloadFile;
+                stage.close();
+            }
+
+            try {
+                List<List<String>> records = new ArrayList<>();
+                BufferedReader br = new BufferedReader(new FileReader("previous_sessions/"+temp[0])); //PATH FOR JAR
+                //BufferedReader br = new BufferedReader(new FileReader("src/previous_sessions/"+temp[0])); //PATH FOR INTELLIJ
+                String line;
+                while ((line = br.readLine()) != null) { //for each line
+                    String[] values = line.split(","); //save each line as an array of Strings where each string is a value
+                    records.add(Arrays.asList(values)); //add the array to a list of arrays, where each array is a line of values from the CSV
+                }
+
+                //make sure the database is clean
+                String drop1 = "DROP TABLE IF EXISTS Entry";
+                String drop2 = "DROP TABLE IF EXISTS DP";
+                String drop3 = "DROP TABLE IF EXISTS MatrixCell";
+                String drop4 = "DROP TABLE IF EXISTS CN";
+                String drop5 = "DROP TABLE IF EXISTS CNFRLink";
+
+                String create1 = "CREATE TABLE Entry(FR mediumtext, DPID int(255), displayNum mediumtext, numChildren int(255), parentID int(255));";
+                String create2 = "CREATE TABLE DP(DPID int(255), DP mediumtext, count int(255), isPrimary int(11));";
+                String create3 = "CREATE TABLE MatrixCell(matrixrow int(255), matrixcolumn int(255), DPIDfr int(255), equation mediumtext, DPcount int(255), DPIDdp int(255), symbol char(1));";
+                String create4 = "CREATE TABLE CN(cn mediumtext, displayID mediumtext, parentID mediumtext);";
+                String create5 = "CREATE TABLE CNFRLink(DPID int(255), CNdisplayID mediumtext);";
+
+                executeDatabaseU(drop1);
+                executeDatabaseU(drop2);
+                executeDatabaseU(drop3);
+                executeDatabaseU(drop4);
+                executeDatabaseU(drop5);
+
+                executeDatabaseU(create1);
+                executeDatabaseU(create2);
+                executeDatabaseU(create3);
+                executeDatabaseU(create4);
+                executeDatabaseU(create5);
+
+                int asterisk = 0; //changes to 1 when an asterisk is found, means next line is column titles. changes to 0 after the line with column titles is passed
+                int table = 0; //counts what table we're on
+                for(List<String> row : records){
+                    if(row.get(0).equals("* ")){ //indicates new table, have to skip this row and the next one
+                        asterisk = 1;
+                        table++;
+                    }
+                    else if(asterisk == 1){ //means this row is just the column titles, skip it
+                        asterisk = 0;
+                    }
+                    else if(row.size() == 1){ //just a new line character, skip it
+                        //System.out.println("What is it?: " + row.get(0));
+                    }
+                    else{ //if it's a row of data
+                        if(table == 1){ //ENTRY TABLE
+                            //System.out.println("row.get(0): " + row.get(0));
+                            String sql = "INSERT INTO ENTRY VALUES('" + row.get(0) + "', " + row.get(1) + ", '" + row.get(2) + "', " + row.get(3) + ", " + row.get(4) + ");";
+                            executeDatabaseU(sql);
+                        }
+                        else if (table == 2){ //DP TABLE
+                            String sql = "INSERT INTO DP VALUES(" + row.get(0) + ", '" + row.get(1)+ "', " + row.get(2)+ ", " + row.get(3) + ");";
+                            executeDatabaseU(sql);
+                        }
+                        else if (table == 3){ //MATRIXCELL TABLE
+                            String sql = "INSERT INTO MatrixCell VALUES(" + row.get(0) + ", " + row.get(1) + ", " + row.get(2) + ", '" + row.get(3) + "', " + row.get(4) + ", " + row.get(5) + ", '" + row.get(6) + "');";
+                            executeDatabaseU(sql);
+                        }
+                        else if (table == 4){ //CN TABLE
+                            String sql = "INSERT INTO CN VALUES('" + row.get(0) + "', '" + row.get(1) + "', '" + row.get(2) + "');";
+                            executeDatabaseU(sql);
+                        }
+                        else if (table == 5){ //CNFRLINK TABLE
+                            String sql = "INSERT INTO CNFRLink VALUES(" + row.get(0) + ", '" + row.get(0) + "');";
+                            executeDatabaseU(sql);
+                        }
+                    }
+                }
+
+                //update the switches values so they don't clear the databases when the user goes to a new page for the first time
+                Main.switchesCN = 2;
+                Main.switchesMatrix = 2;
+                refreshData(); //pull the Entry data from the database
+                autoDPID = FRDP.length - 1;
+                refreshCNData(); //pull the CN data from the database
+                buildTree(); //build the tree
+            }
+            catch(Exception e){
+                e.printStackTrace();
+            }
+
+
+    });
+    }
+
+
+    /**
+     * Called from deleteRow() function to determine the row/column that the Entry being deleted is in in the Matrix
+     * @param sql Query to be executed in database, query will ask for matrixrow/matrixcolumn of row with a certain DPID
+     * @return row or column index of deleted Entry, or -1 if there is an error
+     */
+    private int getResult(String sql){
+        String url_ = "jdbc:mariadb://localhost:3306/mysql";
+        String usr = "root";
+        String pwd = "root";
+        try {
+            Connection myconn = DriverManager.getConnection(url_, usr, pwd);
+            Statement stmt = myconn.createStatement();
+
+            ResultSet rs = stmt.executeQuery(sql);
+
+            if(rs.next()){
+                return rs.getInt(1);
+            }
+            else{
+                return -1;
+            }
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+        return -1;
+    }
+
 
 }
 

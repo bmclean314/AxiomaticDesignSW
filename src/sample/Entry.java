@@ -1,7 +1,5 @@
 package sample;
 
-import javafx.beans.property.SimpleStringProperty;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -14,19 +12,13 @@ import java.sql.Statement;
  * @author Bridget McLean - bmclean@wpi.edu
  */
 public class Entry {
-//    public SimpleStringProperty FR;
-//    public SimpleStringProperty DP;
     public String FR;
-    public String DP;
-
     public int DPID;
-
     private DP[] dpList;
-
     public String displayNum;
     public int numChildren;
     public int parentID;
-    public CN[] CNList;
+    private CN[] CNList;
     public int selected; //Denotes that this entry was selected for tracing from the CN view
     /**
      * Constructor for an Entry object
@@ -82,9 +74,9 @@ public class Entry {
         DP[] newDPList = new DP[len + 1];
         System.arraycopy(this.dpList, 0, newDPList, 0, this.dpList.length);
 
-        this.getPrimaryDP().setIsPrimary(0); //change the primaryDP
+        //this.getPrimaryDP().setIsPrimary(false); //change the primaryDP
 
-        newDPList[len] = new DP(newDP, this.dpList[0].getDPId(), len, 1); //add the new DP, make it primary
+        newDPList[len] = new DP(newDP, this.dpList[0].getDPId(), len, false); //add the new DP,
 
 
         //ADD TO DATABASE DP TABLE HERE
@@ -95,9 +87,9 @@ public class Entry {
             Connection myconn = DriverManager.getConnection(url_, usr, pwd);
             Statement stmt = myconn.createStatement();
 
-            String sql = "INSERT INTO DP VALUES(" + this.dpList[0].getDPId() + ", '" + newDP + "', " + len + ", 1);";
-            String sql2 = "UPDATE DP SET isPrimary = 0 WHERE isPrimary = 1 AND DPID = " + this.dpList[0].getDPId() + ";";
-            stmt.executeUpdate(sql2); //sql2 goes first because it changes all the isPrimary to 0
+            String sql = "INSERT INTO DP VALUES(" + this.dpList[0].getDPId() + ", '" + newDP + "', " + len + ", 0);";
+            //String sql2 = "UPDATE DP SET isPrimary = 0 WHERE isPrimary = 1 AND DPID = " + this.dpList[0].getDPId() + ";";
+            //stmt.executeUpdate(sql2); //sql2 goes first because it changes all the isPrimary to 0
             stmt.executeUpdate(sql); //then add the new DP where isPrimary is 1
         } catch (Exception e) {
             e.printStackTrace();
@@ -105,6 +97,24 @@ public class Entry {
 
         this.dpList = newDPList; //set it to the entry object
         return newDPList;
+    }
+
+    /**
+     * Removes the DP with the given count number from the Entry's DP list. Also adjusts all the remaining DP's counts
+     * as necessary.
+     * @param count the count number of the DP that should be deleted, also equates to that DP's index in the list.
+     */
+    public void removeDP(int count){
+        DP[] newArr = new DP[this.getDP().length-1];
+        System.arraycopy(this.getDP(), 0, newArr, 0, count);
+        System.arraycopy(this.getDP(), count+1, newArr, count, newArr.length-count);
+        this.setDpList(newArr);
+
+        for(DP dp : newArr){
+            if(dp.getCount() > count){
+                dp.setCount(dp.getCount()-1);
+            }
+        }
     }
 
     /**
@@ -149,10 +159,6 @@ public class Entry {
         this.numChildren = numChildren;
     }
 
-    public void setDP(String DP) {
-        this.DP = DP;
-    }
-
     /**
      * Getter for the DPID attribute
      * @return int - the unique ID number assigned to every Entry object
@@ -170,6 +176,10 @@ public class Entry {
         return dpList;
     }
 
+    /**
+     * Setter for the DpList attribute
+     * @param dpList the new list of DPs to be associated with this Entry
+     */
     public void setDpList(sample.DP[] dpList) {
         this.dpList = dpList;
     }
@@ -182,6 +192,10 @@ public class Entry {
         this.parentID = parentID;
     }
 
+    /**
+     * Getter for the CNList attribute
+     * @return the list of CN objects linked with this FR
+     */
     public CN[] getCNList() {
         return CNList;
     }
@@ -195,15 +209,25 @@ public class Entry {
      * @return the primary DP associated with this FR
      */
     public DP getPrimaryDP(){
-        DP temp = new DP("BAD", -1, -1, -1);
+        DP temp = new DP("BAD", -1, -1, false);
         for(DP dp : this.dpList){
-            if(dp.getIsPrimary() == 1){
+            if(dp.getIsPrimary()){
                 temp = dp;
             }
         }
+        if(temp.getDPId() == -1){
+            temp = this.dpList[0];
+        }
+
         return temp;
     }
 
+    /**
+     * Adds a CN to this Entry's CN list, signifying a link between the CN and the FR.
+     *
+     * @param cn the CN object to add to the list
+     * @return the new CNList with the added CN object
+     */
     public CN[] addCN(CN cn){
         CN[] temp = new CN[this.CNList.length+1];
         System.arraycopy(this.CNList, 0, temp, 0, this.CNList.length);
